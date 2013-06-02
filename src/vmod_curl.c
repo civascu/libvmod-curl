@@ -33,6 +33,8 @@ struct vmod_curl {
 	struct vsb	*body;
 };
 
+struct curl_slist *headers = NULL;
+
 static struct vmod_curl **vmod_curl_list;
 int vmod_curl_list_sz;
 static pthread_mutex_t cl_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -170,6 +172,70 @@ static size_t recv_hdrs(void *ptr, size_t size, size_t nmemb, void *s)
 	return (size * nmemb);
 }
 
+void vmod_head(struct sess *sp, const char *url)
+{
+	CURL *curl_handle;
+	CURLcode cr;
+	struct vmod_curl *c;
+	char *p;
+	unsigned u, v;
+	struct hdr *h, *h2;
+
+	c = cm_get(sp);
+
+	cm_clear_headers(c);
+	cm_clear_body(c);
+
+	curl_handle = curl_easy_init();
+	AN(curl_handle);
+
+	curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+	curl_easy_setopt(curl_handle, CURLOPT_NOSIGNAL , 1L);
+	curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 1L);
+	curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, c);
+	curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, recv_hdrs);
+	curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, c);
+ 	curl_easy_setopt(curl_handle, CURLOPT_NOBODY, 1L);
+	curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER , headers);
+	
+
+	if (c->timeout_ms > 0)
+	  curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT_MS, c->timeout_ms);
+
+	if (c->connect_timeout_ms > 0)
+	  curl_easy_setopt(curl_handle, CURLOPT_CONNECTTIMEOUT_MS, c->connect_timeout_ms);
+
+	if (c->flags & VC_VERIFY_PEER) {
+		curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
+	} else {
+		curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
+	}
+
+	if (c->flags & VC_VERIFY_HOST) {
+		curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 1L);
+	} else {
+		curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 0L);
+	}
+
+	if (c->cafile) {
+		      curl_easy_setopt(curl_handle, CURLOPT_CAINFO, c->cafile);
+	}
+
+	if (c->capath) {
+		      curl_easy_setopt(curl_handle, CURLOPT_CAPATH, c->capath);
+	}
+
+	cr = curl_easy_perform(curl_handle);
+
+	if (cr != 0) {
+		c->error = curl_easy_strerror(cr);
+	}
+
+	curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &c->status);
+
+	curl_easy_cleanup(curl_handle);
+}
+
 void vmod_fetch(struct sess *sp, const char *url)
 {
 	CURL *curl_handle;
@@ -281,6 +347,11 @@ void vmod_set_timeout(struct sess *sp, int timeout) {
 void vmod_set_connect_timeout(struct sess *sp, int timeout) {
 	cm_get(sp)->connect_timeout_ms = timeout;
 }
+
+void vmod_set_req_header(const char *h) {
+	headers = curl_slist_append(headers, h);	
+}
+
 
 void vmod_set_ssl_verify_peer(struct sess *sp, int verify) {
 	if (verify) {

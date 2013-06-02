@@ -2,6 +2,8 @@ Module curl
 Init init_function
 # Fetch the URL in the first parameter
 Function VOID fetch(STRING)
+# Perform a HEAD request on the URL
+Function VOID head(STRING)
 # Return the header named in the first argument
 Function STRING header(STRING)
 # Free the memory used by headers. Not needed, will be handled
@@ -21,3 +23,4 @@ Function VOID set_ssl_cafile(STRING)
 Function VOID set_ssl_capath(STRING)
 Function STRING escape(STRING)
 Function STRING unescape(STRING)
+Function VOID set_req_header(STRING, STRING)
